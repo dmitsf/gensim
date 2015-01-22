@@ -51,6 +51,21 @@ try:
 except ImportError:
     HAS_PATTERN = False
 
+try:
+    import nltk
+    from nltk.corpus import stopwords
+    stws = stopwords.words('russian')
+    HAS_STW = True
+except ImportError:
+    HAS_STW = False
+
+try:
+    import pymorphy2
+    morph = pymorphy2.MorphAnalyzer()
+    HAS_PYMORPHY2 = True
+except ImportError as ex:
+    HAS_PYMORPHY2 = False
+
 
 PAT_ALPHABETIC = re.compile('(((?![\d])\w)+)', re.UNICODE)
 RE_HTML_ENTITY = re.compile(r'&(#?)([xX]?)(\w{1,8});', re.UNICODE)
@@ -99,7 +114,8 @@ def file_or_filename(input):
     """
     if isinstance(input, string_types):
         # input was a filename: open as text file
-        yield smart_open(input)
+        with smart_open(input) as fin:
+            yield fin
     else:
         input.seek(0)
         yield input
@@ -157,7 +173,21 @@ def tokenize(text, lowercase=False, deacc=False, errors="strict", to_lower=False
     if deacc:
         text = deaccent(text)
     for match in PAT_ALPHABETIC.finditer(text):
-        yield match.group()
+        m = match.group()
+        if HAS_PYMORPHY2:
+            info = morph.parse(m)
+            try:
+                form = info[0].normal_form
+            except Exception as e:
+                form = m
+        else:
+            form = m
+            
+        if HAS_STW:
+            if form not in stws:
+                yield form
+        else:
+            yield form
 
 
 def simple_preprocess(doc, deacc=False, min_len=2, max_len=15):
